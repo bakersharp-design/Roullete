@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>American Roulette with Betting</title>
+<style>
+  body {
+    background: #1a1a1a;
+    color: #eee;
+    font-family: Arial, sans-serif;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    user-select: none;
+    min-height: 100vh;
+    padding: 20px;
+  }
+  canvas {
+    background: #005500;
+    border-radius: 50%;
+    box-shadow: 0 0 30px #0f0;
+    margin-top: 20px;
+  }
+  #spinButton {
+    margin-top: 20px;
+    padding: 12px 40px;
+    font-size: 20px;
+    background: #0f0;
+    border: none;
+    border-radius: 12px;
+    cursor: pointer;
+    font-weight: bold;
+    box-shadow: 0 0 15px #0f0;
+    transition: background 0.3s ease;
+  }
+  #spinButton:disabled {
+    background: #3a3a3a;
+    cursor: not-allowed;
+    box-shadow: none;
+    color: #555;
+  }
+  #result {
+    margin-top: 15px;
+    font-size: 24px;
+    min-height: 28px;
+    font-weight: bold;
+    text-align: center;
+    text-shadow: 0 0 10px #0f0;
+  }
+  #bankroll {
+    margin-top: 15px;
+    font-size: 20px;
+    font-weight: 600;
+  }
+  form {
+    margin-top: 25px;
+    background: #002200;
+    padding: 15px 25px;
+    border-radius: 15px;
+    box-shadow: 0 0 15px #0f0;
+    max-width: 360px;
+    width: 100%;
+  }
+  label {
+    display: block;
+    margin-bottom: 6px;
+    font-weight: 600;
+  }
+  select, input[type="number"] {
+    width: 100%;
+    padding: 8px;
+    margin-bottom: 12px;
+    border-radius: 8px;
+    border: none;
+    font-size: 16px;
+    background: #003300;
+    color: #0f0;
+    font-weight: bold;
+    box-shadow: inset 0 0 8px #0f0;
+  }
+  input[type="number"]::-webkit-inner-spin-button,
+  input[type="number"]::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+  button[type="submit"] {
+    width: 100%;
+    background: #00ff00;
+    border: none;
+    padding: 12px;
+    font-weight: 700;
+    font-size: 18px;
+    color: #003300;
+    border-radius: 15px;
+    cursor: pointer;
+    box-shadow: 0 0 20px #0f0;
+    transition: background 0.3s ease;
+  }
+  button[type="submit"]:hover:not(:disabled) {
+    background: #33ff33;
+  }
+  button[type="submit"]:disabled {
+    background: #003300;
+    cursor: not-allowed;
+    box-shadow: none;
+    color: #006600;
+  }
+  #message {
+    margin-top: 10px;
+    min-height: 22px;
+    font-weight: 600;
+    text-align: center;
+    color: #f55;
+    text-shadow: 0 0 5px #f55;
+  }
+</style>
+</head>
+<body>
+
+<h1>American Roulette 🎡</h1>
+
+<canvas id="roulette" width="500" height="500" aria-label="Roulette wheel"></canvas>
+<button id="spinButton" aria-disabled="false" aria-label="Spin the roulette wheel">SPIN</button>
+<div id="result" aria-live="polite"></div>
+<div id="bankroll">Bankroll: $1000</div>
+
+<form id="betForm" aria-label="Place your bet">
+  <label for="betType">Bet Type</label>
+  <select id="betType" name="betType" required>
+    <option value="number">Number (0, 00, 1-36)</option>
+    <option value="color">Color (Red / Black)</option>
+    <option value="oddEven">Odd / Even</option>
+    <option value="dozen">Dozen (1-12, 13-24, 25-36)</option>
+  </select>
+
+  <label for="betValue">Bet Value</label>
+  <input type="text" id="betValue" name="betValue" placeholder="Enter value (e.g. 7 or red)" autocomplete="off" required />
+
+  <label for="betAmount">Bet Amount ($)</label>
+  <input type="number" id="betAmount" name="betAmount" min="1" step="1" value="10" required />
+
+  <button type="submit" id="placeBetBtn">Place Bet & Spin</button>
+  <div id="message" role="alert"></div>
+</form>
+
+<script>
+  // Wheel data
+  const wheelNumbers = [
+    '0', '28', '9', '26', '30', '11', '7', '20', '32', '17', 
+    '5', '22', '34', '15', '3', '24', '36', '13', '1', '00', 
+    '27', '10', '25', '29', '12', '8', '19', '31', '18', '6', 
+    '21', '33', '16', '4', '23', '35', '14', '2'
+  ];
+
+  const redNumbers = new Set(['1','3','5','7','9','12','14','16','18','19','21','23','25','27','30','32','34','36']);
+
+  // Canvas setup
+  const canvas = document.getElementById('roulette');
+  const ctx = canvas.getContext('2d');
+  const centerX = canvas.width / 2;
+  const centerY = canvas.height / 2;
+  const outerRadius = 230;
+  const innerRadius = 180;
+  const ballRadius = 12;
+
+  // Betting & UI elements
+  const spinButton = document.getElementById('spinButton');
+  const resultEl = document.getElementById('result');
+  const bankrollEl = document.getElementById('bankroll');
+  const betForm = document.getElementById('betForm');
+  const betTypeEl = document.getElementById('betType');
+  const betValueEl = document.getElementById('betValue');
+  const betAmountEl = document.getElementById('betAmount');
+  const messageEl = document.getElementById('message');
+  const placeBetBtn = document.getElementById('placeBetBtn');
+
+  // Game state
+  let bankroll = 1000;
+  let wheelRotation = 0;
+  let ballAngle = 0;
+  let ballDistance = outerRadius + 20;
+  let spinning = false;
+  let spinStartTime = 0;
+  const spinDuration = 8000; // ms
+  let resultNumber = null;
+  let ballAngleStart = Math.random() * 2 * Math.PI;
+
+  function updateBankroll() {
+    bankrollEl.textContent = `Bankroll: $${bankroll}`;
+  }
+
+  function drawWheel() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    const segmentAngle = (2 * Math.PI) / wheelNumbers.length;
+
+    for (let i = 0; i < wheelNumbers.length; i++) {
+      const angleStart = wheelRotation + i * segmentAngle;
+      const angleEnd = angleStart + segmentAngle;
+
+      let fillColor = '#006600'; // green default for 0 and 00
+
+      if (wheelNumbers[i] === '0' || wheelNumbers[i] === '00') {
+        fillColor = '#006600';
+      } else if (redNumbers.has(wheelNumbers[i])) {
+        fillColor = '#b22222';
+      } else {
+        fillColor = '#222222';
+      }
+
+      if (!spinning && resultNumber !== null && wheelNumbers[i] === resultNumber) {
+        fillColor = '#FFD700'; // gold highlight
+      }
+
+      ctx.beginPath();
+      ctx.moveTo(centerX, centerY);
+      ctx.arc(centerX, centerY, outerRadius, angleStart, angleEnd, false);
+      ctx.lineTo(centerX, centerY);
+      ctx.fillStyle = fillColor;
+      ctx.fill();
+      ctx.strokeStyle = '#004400';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+
+      ctx.beginPath();
+      ctx.moveTo(centerX, centerY);
+      ctx.arc(centerX, centerY, innerRadius, angleStart, angleEnd, false);
+      ctx.lineTo(centerX, centerY);
+      ctx.fillStyle = '#1a1a1a';
+      ctx.fill();
+    }
+
+    // Draw numbers
+    ctx.fillStyle = '#eee';
+    ctx.font = 'bold 18px Arial';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+
+    for (let i = 0; i < wheelNumbers.length; i++) {
+      const angle = wheelRotation + (i + 0.5) * segmentAngle;
+      const textRadius = (outerRadius + innerRadius) / 2;
+
+      const x = centerX + textRadius * Math.cos(angle);
+      const y = centerY + textRadius * Math.sin(angle);
+
+      let textColor = '#eee';
+      if (wheelNumbers[i] === '0' || wheelNumbers[i] === '00') {
+        textColor = '#eee';
+      } else if (redNumbers.has(wheelNumbers[i])) {
+        textColor = '#eee';
+      } else {
+        textColor = '#bbb
